@@ -116,3 +116,19 @@ async def test_reply_comment_uses_observed_nested_reply_ids():
 
     call = session.calls[0]
     assert call["data"] == "is_cy=0&link_id=182596616&reply_id=879644492&root_id=879644492&text=nested"
+
+
+def test_parse_qr_login_params_requires_login_url():
+    client = XhhClient(XhhConfig(base_url="https://api.example.test"))
+
+    params = client.parse_qr_login_params(
+        "https://api.xiaoheihe.cn/account/qr_login/?qr=abc-123&app=heybox"
+    )
+
+    assert params == {"qr": "abc-123", "app": "heybox"}
+
+
+def test_qrcode_file_uses_cookie_directory():
+    client = XhhClient(XhhConfig(cookie_file="data/cookie.json"))
+
+    assert str(client.qrcode_file()).replace("\\", "/") == "data/qrcode.png"

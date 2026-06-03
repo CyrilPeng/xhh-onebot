@@ -7,8 +7,7 @@ import logging
 import time
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote, urlencode
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, quote, urlencode, urlparse
 
 import aiohttp
 import qrcode
@@ -70,6 +69,21 @@ class XhhClient:
             ),
             encoding="utf-8",
         )
+
+    def qrcode_file(self) -> Path:
+        path = Path(self.config.cookie_file)
+        if path.parent == Path(""):
+            return Path("qrcode.png")
+        return path.parent / "qrcode.png"
+
+    def parse_qr_login_params(self, qr_url: str) -> dict[str, str]:
+        parsed = urlparse(qr_url)
+        if parsed.path != "/account/qr_login/":
+            raise RuntimeError(f"unexpected xhh qr login path: {qr_url}")
+        params = dict(parse_qsl(parsed.query, keep_blank_values=True))
+        if not params.get("qr"):
+            raise RuntimeError(f"missing qr token in xhh qr login url: {qr_url}")
+        return params
 
     def _session(self) -> aiohttp.ClientSession:
         if self.session is None:
@@ -137,42 +151,64 @@ class XhhClient:
             return payload
 
     async def login_qrcode(self) -> None:
-        response = await self.request("GET", "/account/get_qrcode_url/")
-        qr_url = response.get("result", {}).get("qr_url")
-        if not qr_url:
-            raise RuntimeError(f"missing qr_url: {response}")
-        image = qrcode.make(qr_url)
-        image.save("qrcode.png")
-        print("Scan qrcode.png to login Xiaoheihe")
-        qr = qrcode.QRCode(border=1)
-        qr.add_data(qr_url)
-        qr.make(fit=True)
-        qr.print_ascii(invert=True)
-        print(qr_url)
-
-        login_query = qr_url.split("/account/qr_login/?", 1)[-1]
-        params = dict(item.split("=", 1) for item in login_query.split("&") if "=" in item)
+        self.cookie = CookieInfo()
         while True:
-            async with self._session().get(
-                f"{self.config.base_url}/account/qr_state/",
-                params={**params, **self._common_params("/account/qr_state/")},
-                headers={"host": "api.xiaoheihe.cn", "Referer": "https://www.xiaoheihe.cn/"},
-            ) as resp:
-                data = await resp.json(content_type=None)
-                result = data.get("result", {})
-                print(f"\r{result.get('error')} | {result.get('error_msg')}", end="")
-                if result.get("error") != "ok":
-                    await asyncio_sleep(1)
-                    continue
-                cookies = resp.cookies
-                cookie_parts = [f"{key}={morsel.value}" for key, morsel in cookies.items()]
-                self.cookie.cookie = ";".join(cookie_parts) + self._token_cookie()
-                if "user_heybox_id" in cookies:
-                    self.cookie.heybox_id = cookies["user_heybox_id"].value
-                self.cookie.time = int(time.time())
-                self.save_cookie()
-                print(f"\nLogin success: {result.get('nickname', '')}")
-                return
+            response = await self.request("GET", "/account/get_qrcode_url/")
+            result = response.get("result", {})
+            qr_url = result.get("qr_url")
+            if not qr_url:
+                raise RuntimeError(f"missing qr_url: {response}")
+            params = self.parse_qr_login_params(str(qr_url))
+            expire = int(result.get("expire") or 120)
+            qrcode_path = self.qrcode_file()
+            qrcode_path.parent.mkdir(parents=True, exist_ok=True)
+            image = qrcode.make(qr_url)
+            image.save(qrcode_path)
+            if qrcode_path != Path("qrcode.png"):
+                image.save("qrcode.png")
+            print(f"Scan {qrcode_path} to login Xiaoheihe")
+            print("If terminal QR cannot be scanned, open the PNG file instead.")
+            qr = qrcode.QRCode(border=1)
+            qr.add_data(qr_url)
+            qr.make(fit=True)
+            qr.print_ascii(invert=True)
+            print(f"QR login URL: {qr_url}")
+
+            expires_at = time.monotonic() + max(expire - 3, 10)
+            last_error = None
+            while time.monotonic() < expires_at:
+                state_params = self._common_params("/account/qr_state/")
+                state_params.update(params)
+                async with self._session().get(
+                    f"{self.config.base_url}/account/qr_state/",
+                    params=state_params,
+                    headers={
+                        "host": urlparse(self.config.base_url).netloc or "api.xiaoheihe.cn",
+                        "Referer": "https://www.xiaoheihe.cn/",
+                    },
+                ) as resp:
+                    data = await resp.json(content_type=None)
+                    result = data.get("result", {})
+                    error = result.get("error")
+                    error_msg = result.get("error_msg") or ""
+                    if error != last_error:
+                        print(f"\nQR login state: {error} {error_msg}".rstrip())
+                        last_error = error
+                    if error != "ok":
+                        await asyncio_sleep(1)
+                        continue
+                    cookies = resp.cookies
+                    cookie_parts = [f"{key}={morsel.value}" for key, morsel in cookies.items()]
+                    if not cookie_parts:
+                        raise RuntimeError(f"xhh qr login returned ok but no cookies: {data}")
+                    self.cookie.cookie = ";".join(cookie_parts) + self._token_cookie()
+                    if "user_heybox_id" in cookies:
+                        self.cookie.heybox_id = cookies["user_heybox_id"].value
+                    self.cookie.time = int(time.time())
+                    self.save_cookie()
+                    print(f"\nLogin success: {result.get('nickname', '')}")
+                    return
+            print("\nQR code expired, refreshing...")
 
     async def check_login(self) -> bool:
         if not self.cookie.cookie:
