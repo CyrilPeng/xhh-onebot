@@ -28,7 +28,8 @@ class App:
         await self.store.open()
         await self.xhh.open()
         if not await self.xhh.check_login():
-            logger.warning("xhh login check failed; run `python -m xhh_onebot login` if polling keeps failing")
+            logger.warning("xhh login check failed after pre-check; cookie may have expired during startup")
+        logger.info("xhh login OK, starting poll loop and OneBot WS")
         await asyncio.gather(self.onebot.run_forever(), self.poll_loop())
 
     async def stop(self) -> None:

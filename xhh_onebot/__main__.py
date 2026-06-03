@@ -85,6 +85,13 @@ async def async_main() -> None:
         return
 
     if args.command == "start":
+        # Auto-detect cookie: if missing or expired, trigger login first
+        async with XhhClient(config.xhh) as client:
+            if not await client.check_login():
+                print("No valid cookie found or cookie expired.")
+                print("Starting login flow — please scan the QR code...")
+                await client.login_qrcode()
+                print("Login successful, starting adapter...")
         app = App(config)
         try:
             await app.start()
