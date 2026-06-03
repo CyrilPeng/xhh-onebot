@@ -3,6 +3,7 @@
                    "reverse_ws_url":  "ws://host.docker.internal:6199/ws",
                    "access_token":  "",
                    "self_id":  10000001,
+                   "mention_self":  true,
                    "heartbeat_interval":  30,
                    "reconnect_interval":  5
                },
@@ -26,3 +27,4 @@
                      "path":  "data/xhh-onebot.db"
                  }
 }
+
