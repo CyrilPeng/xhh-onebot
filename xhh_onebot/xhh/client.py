@@ -112,6 +112,30 @@ class XhhClient:
             params["heybox_id"] = self.cookie.heybox_id
         return params
 
+    def _login_params(self, path: str) -> dict[str, str]:
+        params = self._common_params(path)
+        params.update(
+            {
+                "app": "web",
+                "x_client_type": "weboutapp",
+                "web_version": "",
+            }
+        )
+        return params
+
+    def _cookie_from_login_result(self, result: dict[str, Any]) -> tuple[str, str]:
+        profile = result.get("profile") or {}
+        account_detail = result.get("account_detail") or {}
+        heybox_id = str(profile.get("heybox_id") or account_detail.get("userid") or "")
+        pkey = str(result.get("pkey") or "")
+        if not heybox_id or not pkey:
+            raise RuntimeError(f"xhh qr login returned ok but missing heybox_id or pkey: {result}")
+        return (
+            f"heybox_id={heybox_id};user_heybox_id={heybox_id};pkey={pkey};user_pkey={pkey}"
+            + self._token_cookie(),
+            heybox_id,
+        )
+
     async def request(
         self,
         method: str,
@@ -153,7 +177,16 @@ class XhhClient:
     async def login_qrcode(self) -> None:
         self.cookie = CookieInfo()
         while True:
-            response = await self.request("GET", "/account/get_qrcode_url/")
+            login_query = self._login_params("/account/get_qrcode_url/")
+            async with self._session().get(
+                f"{self.config.base_url}/account/get_qrcode_url/",
+                params=login_query,
+                headers={
+                    "host": urlparse(self.config.base_url).netloc or "api.xiaoheihe.cn",
+                    "Referer": "https://login.xiaoheihe.cn/",
+                },
+            ) as qr_response:
+                response = await qr_response.json(content_type=None)
             result = response.get("result", {})
             qr_url = result.get("qr_url")
             if not qr_url:
@@ -177,14 +210,14 @@ class XhhClient:
             expires_at = time.monotonic() + max(expire - 3, 10)
             last_error = None
             while time.monotonic() < expires_at:
-                state_params = self._common_params("/account/qr_state/")
+                state_params = self._login_params("/account/qr_state/")
                 state_params.update(params)
                 async with self._session().get(
                     f"{self.config.base_url}/account/qr_state/",
                     params=state_params,
                     headers={
                         "host": urlparse(self.config.base_url).netloc or "api.xiaoheihe.cn",
-                        "Referer": "https://www.xiaoheihe.cn/",
+                        "Referer": "https://login.xiaoheihe.cn/",
                     },
                 ) as resp:
                     data = await resp.json(content_type=None)
@@ -194,16 +227,20 @@ class XhhClient:
                     if error != last_error:
                         print(f"\nQR login state: {error} {error_msg}".rstrip())
                         last_error = error
+                    if error == "ready":
+                        await asyncio_sleep(1)
+                        continue
                     if error != "ok":
                         await asyncio_sleep(1)
                         continue
                     cookies = resp.cookies
                     cookie_parts = [f"{key}={morsel.value}" for key, morsel in cookies.items()]
-                    if not cookie_parts:
-                        raise RuntimeError(f"xhh qr login returned ok but no cookies: {data}")
-                    self.cookie.cookie = ";".join(cookie_parts) + self._token_cookie()
-                    if "user_heybox_id" in cookies:
-                        self.cookie.heybox_id = cookies["user_heybox_id"].value
+                    if cookie_parts:
+                        self.cookie.cookie = ";".join(cookie_parts) + self._token_cookie()
+                        if "user_heybox_id" in cookies:
+                            self.cookie.heybox_id = cookies["user_heybox_id"].value
+                    else:
+                        self.cookie.cookie, self.cookie.heybox_id = self._cookie_from_login_result(result)
                     self.cookie.time = int(time.time())
                     self.save_cookie()
                     print(f"\nLogin success: {result.get('nickname', '')}")
