@@ -10,11 +10,15 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+COPY requirements.txt ./
+
+RUN pip install --upgrade pip \
+    && pip install -r requirements.txt
+
 COPY pyproject.toml README.md ./
 COPY xhh_onebot ./xhh_onebot
 
-RUN pip install --upgrade pip \
-    && pip install .
+RUN pip install --no-deps .
 
 RUN mkdir -p /app/data
 
