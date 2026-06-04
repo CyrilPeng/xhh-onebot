@@ -113,14 +113,22 @@ class XhhClient:
         return params
 
     def _login_params(self, path: str) -> dict[str, str]:
-        params = self._common_params(path)
-        params.update(
-            {
-                "app": "web",
-                "x_client_type": "weboutapp",
-                "web_version": "",
-            }
-        )
+        hkey, nonce, timestamp = get_keys(path)
+        params = {
+            "app": "web",
+            "os_type": "web",
+            "x_app": "heybox_website",
+            "x_client_type": "weboutapp",
+            "x_os_type": "Windows",
+            "web_version": "",
+            "device_id": self.config.device_id,
+            "version": self.config.version,
+            "hkey": hkey,
+            "_time": str(timestamp),
+            "nonce": nonce,
+        }
+        if self.cookie.heybox_id:
+            params["heybox_id"] = self.cookie.heybox_id
         return params
 
     def _cookie_from_login_result(self, result: dict[str, Any]) -> tuple[str, str]:
