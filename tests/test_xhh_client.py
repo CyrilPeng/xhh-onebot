@@ -134,9 +134,47 @@ def test_qrcode_file_uses_cookie_directory():
     assert str(client.qrcode_file()).replace("\\", "/") == "data/qrcode.png"
 
 
+def test_cookie_file_uses_configured_relative_path_outside_docker():
+    client = XhhClient(XhhConfig(cookie_file="cookie.json"))
+
+    assert str(client.cookie_file()).replace("\\", "/") == "cookie.json"
+
+
 def test_qrcode_files_include_primary_path():
     client = XhhClient(XhhConfig(cookie_file="data/cookie.json"))
 
     paths = [str(path).replace("\\", "/") for path in client.qrcode_files()]
 
     assert "data/qrcode.png" in paths
+
+
+def test_cookie_file_redirects_to_docker_data_dir(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pathlib import Path as P
+
+    original_is_dir = P.is_dir
+
+    def mock_is_dir(self: P) -> bool:
+        if self == P("/app/data"):
+            return True
+        return original_is_dir(self)
+
+    monkeypatch.setattr(P, "is_dir", mock_is_dir)
+
+    client = XhhClient(XhhConfig(cookie_file="cookie.json"))
+    assert str(client.cookie_file()).replace("\\", "/") == "/app/data/cookie.json"
+
+
+def test_cookie_file_preserves_subdir_even_in_docker(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pathlib import Path as P
+
+    original_is_dir = P.is_dir
+
+    def mock_is_dir(self: P) -> bool:
+        if self == P("/app/data"):
+            return True
+        return original_is_dir(self)
+
+    monkeypatch.setattr(P, "is_dir", mock_is_dir)
+
+    client = XhhClient(XhhConfig(cookie_file="data/cookie.json"))
+    assert str(client.cookie_file()).replace("\\", "/") == "data/cookie.json"
