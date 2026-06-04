@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import logging
 import shutil
 from pathlib import Path
 
@@ -9,6 +10,9 @@ from xhh_onebot.app import App
 from xhh_onebot.config import load_config, write_default_config
 from xhh_onebot.log import setup_logging
 from xhh_onebot.xhh.client import XhhClient
+
+
+logger = logging.getLogger(__name__)
 
 
 async def async_main() -> None:
@@ -54,8 +58,12 @@ async def async_main() -> None:
     config = load_config(args.config)
 
     if args.command == "login":
-        async with XhhClient(config.xhh) as client:
-            await client.login_qrcode()
+        try:
+            async with XhhClient(config.xhh) as client:
+                await client.login_qrcode()
+        except Exception:
+            logger.exception("xhh login failed")
+            raise SystemExit(1)
         return
 
     if args.command == "check-login":
@@ -88,10 +96,14 @@ async def async_main() -> None:
         # Auto-detect cookie: if missing or expired, trigger login first
         async with XhhClient(config.xhh) as client:
             if not await client.check_login():
-                print("No valid cookie found or cookie expired.")
-                print("Starting login flow — please scan the QR code...")
-                await client.login_qrcode()
-                print("Login successful, starting adapter...")
+                logger.info("No valid cookie found or cookie expired.")
+                logger.info("Starting login flow - please scan the QR code...")
+                try:
+                    await client.login_qrcode()
+                except Exception:
+                    logger.exception("xhh login failed during startup")
+                    raise SystemExit(1)
+                logger.info("Login successful, starting adapter...")
         app = App(config)
         try:
             await app.start()

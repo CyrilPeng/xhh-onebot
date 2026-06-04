@@ -199,13 +199,13 @@ class XhhClient:
             image.save(qrcode_path)
             if qrcode_path != Path("qrcode.png"):
                 image.save("qrcode.png")
-            print(f"Scan {qrcode_path} to login Xiaoheihe")
-            print("If terminal QR cannot be scanned, open the PNG file instead.")
+            logger.info("Scan %s to login Xiaoheihe", qrcode_path)
+            logger.info("If terminal QR cannot be scanned, open the PNG file instead.")
             qr = qrcode.QRCode(border=1)
             qr.add_data(qr_url)
             qr.make(fit=True)
             qr.print_ascii(invert=True)
-            print(f"QR login URL: {qr_url}")
+            logger.info("QR login URL: %s", qr_url)
 
             expires_at = time.monotonic() + max(expire - 3, 10)
             last_error = None
@@ -225,7 +225,7 @@ class XhhClient:
                     error = result.get("error")
                     error_msg = result.get("error_msg") or ""
                     if error != last_error:
-                        print(f"\nQR login state: {error} {error_msg}".rstrip())
+                        logger.info("QR login state: %s %s", error, error_msg)
                         last_error = error
                     if error == "ready":
                         await asyncio_sleep(1)
@@ -243,9 +243,9 @@ class XhhClient:
                         self.cookie.cookie, self.cookie.heybox_id = self._cookie_from_login_result(result)
                     self.cookie.time = int(time.time())
                     self.save_cookie()
-                    print(f"\nLogin success: {result.get('nickname', '')}")
+                    logger.info("Login success: %s", result.get("nickname", ""))
                     return
-            print("\nQR code expired, refreshing...")
+            logger.info("QR code expired, refreshing...")
 
     async def check_login(self) -> bool:
         if not self.cookie.cookie:
