@@ -136,6 +136,28 @@ class XhhClient:
             heybox_id,
         )
 
+    def _headers(self, referer: str = "https://www.xiaoheihe.cn/") -> dict[str, str]:
+        return {
+            "host": urlparse(self.config.base_url).netloc or "api.xiaoheihe.cn",
+            "Referer": referer,
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0"
+            ),
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        }
+
+    async def _read_json_response(self, response: aiohttp.ClientResponse, context: str) -> dict[str, Any]:
+        text = await response.text()
+        if response.status < 200 or response.status >= 300:
+            raise RuntimeError(f"xhh {context} failed: {response.status} {text}")
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"invalid xhh {context} json response: {response.status} {text}") from exc
+
     async def request(
         self,
         method: str,
@@ -147,10 +169,7 @@ class XhhClient:
     ) -> dict[str, Any]:
         query = dict(params or {})
         query.update(self._common_params(path))
-        headers = {
-            "host": urlparse(self.config.base_url).netloc or "api.xiaoheihe.cn",
-            "Referer": "https://www.xiaoheihe.cn/",
-        }
+        headers = self._headers()
         if data:
             headers["content-type"] = "application/x-www-form-urlencoded;charset=utf-8"
         if self.cookie.cookie:
@@ -163,13 +182,7 @@ class XhhClient:
             data=urlencode(data or {}, quote_via=quote) if data else None,
             headers=headers,
         ) as response:
-            text = await response.text()
-            if response.status < 200 or response.status >= 300:
-                raise RuntimeError(f"xhh request failed: {response.status} {text}")
-            try:
-                payload = json.loads(text)
-            except json.JSONDecodeError as exc:
-                raise RuntimeError(f"invalid xhh json response: {text}") from exc
+            payload = await self._read_json_response(response, f"request {method} {path}")
             if payload.get("status") in {"failed", "fail"} or payload.get("stat") in {"failed", "fail"}:
                 logger.warning("xhh api returned failure for %s %s: %s", method, path, payload)
             return payload
@@ -181,12 +194,9 @@ class XhhClient:
             async with self._session().get(
                 f"{self.config.base_url}/account/get_qrcode_url/",
                 params=login_query,
-                headers={
-                    "host": urlparse(self.config.base_url).netloc or "api.xiaoheihe.cn",
-                    "Referer": "https://login.xiaoheihe.cn/",
-                },
+                headers=self._headers("https://login.xiaoheihe.cn/"),
             ) as qr_response:
-                response = await qr_response.json(content_type=None)
+                response = await self._read_json_response(qr_response, "get qrcode url")
             result = response.get("result", {})
             qr_url = result.get("qr_url")
             if not qr_url:
@@ -215,12 +225,9 @@ class XhhClient:
                 async with self._session().get(
                     f"{self.config.base_url}/account/qr_state/",
                     params=state_params,
-                    headers={
-                        "host": urlparse(self.config.base_url).netloc or "api.xiaoheihe.cn",
-                        "Referer": "https://login.xiaoheihe.cn/",
-                    },
+                    headers=self._headers("https://login.xiaoheihe.cn/"),
                 ) as resp:
-                    data = await resp.json(content_type=None)
+                    data = await self._read_json_response(resp, "qr state")
                     result = data.get("result", {})
                     error = result.get("error")
                     error_msg = result.get("error_msg") or ""
