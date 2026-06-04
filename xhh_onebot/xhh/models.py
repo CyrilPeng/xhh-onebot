@@ -18,6 +18,11 @@ class XhhMessage:
     root_comment_id: int
     link_id: int
     user_id: int
+    user_name: str = ""
+    link_title: str = ""
+    link_user: str = ""
+    link_user_id: int = 0
+    mentioned_at: int = 0
 
 
 @dataclass(slots=True)

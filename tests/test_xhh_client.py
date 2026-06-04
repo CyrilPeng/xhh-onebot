@@ -1,4 +1,5 @@
-﻿from types import TracebackType
+import json
+from types import TracebackType
 from typing import Any
 
 import pytest
@@ -9,6 +10,9 @@ from xhh_onebot.xhh.client import XhhClient
 
 class FakeResponse:
     status = 200
+
+    def __init__(self, text: str | None = None) -> None:
+        self._text = text or '{"status":"ok","result":{"link":{"title":"t","text":"[]"}}}'
 
     async def __aenter__(self):
         return self
@@ -22,16 +26,17 @@ class FakeResponse:
         return None
 
     async def text(self) -> str:
-        return '{"status":"ok","result":{"link":{"title":"t","text":"[]"}}}'
+        return self._text
 
 
 class FakeSession:
-    def __init__(self) -> None:
+    def __init__(self, response_text: str | None = None) -> None:
         self.calls: list[dict[str, Any]] = []
+        self.response_text = response_text
 
     def request(self, method: str, url: str, **kwargs: Any) -> FakeResponse:
         self.calls.append({"method": method, "url": url, **kwargs})
-        return FakeResponse()
+        return FakeResponse(self.response_text)
 
 
 @pytest.mark.asyncio
@@ -72,6 +77,40 @@ async def test_fetch_mentions_uses_browser_observed_message_type():
     assert call["params"]["offset"] == 0
     assert call["params"]["limit"] == 20
     assert call["params"]["no_more"] == "false"
+
+
+@pytest.mark.asyncio
+async def test_fetch_mentions_parses_log_metadata():
+    payload = {
+        "status": "ok",
+        "result": {
+            "messages": [
+                {
+                    "comment_a_id": 881321164,
+                    "comment_a_text": "@bot please review",
+                    "message_id": 3885547813,
+                    "root_comment_id": 881321164,
+                    "linkid": 182596616,
+                    "userid_a": 30060992,
+                    "user_a": {"username": "author-a"},
+                    "link_title": "post title",
+                    "link_user": "author-a",
+                    "link_userid": 30060992,
+                    "timestamp": "1780587671.0000",
+                }
+            ]
+        },
+    }
+    client = XhhClient(XhhConfig(base_url="https://api.example.test"))
+    client.session = FakeSession(json.dumps(payload))  # type: ignore[assignment]
+
+    messages = await client.fetch_mentions(limit=20)
+
+    assert messages[0].user_name == "author-a"
+    assert messages[0].link_title == "post title"
+    assert messages[0].link_user == "author-a"
+    assert messages[0].link_user_id == 30060992
+    assert messages[0].mentioned_at == 1780587671
 
 @pytest.mark.asyncio
 async def test_reply_comment_uses_browser_observed_is_cy_default():

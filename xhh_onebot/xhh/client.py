@@ -312,6 +312,8 @@ class XhhClient:
         messages = data.get("result", {}).get("messages", []) or []
         result: list[XhhMessage] = []
         for item in messages:
+            user_a = item.get("user_a") or {}
+            user_name = user_a.get("username") if isinstance(user_a, dict) else ""
             result.append(
                 XhhMessage(
                     comment_id=int(item.get("comment_a_id") or 0),
@@ -320,6 +322,11 @@ class XhhClient:
                     root_comment_id=int(item.get("root_comment_id") or 0),
                     link_id=int(item.get("linkid") or 0),
                     user_id=int(item.get("userid_a") or 0),
+                    user_name=str(user_name or ""),
+                    link_title=str(item.get("link_title") or ""),
+                    link_user=str(item.get("link_user") or ""),
+                    link_user_id=int(item.get("link_userid") or 0),
+                    mentioned_at=int(float(item.get("timestamp") or 0)),
                 )
             )
         return result

@@ -222,7 +222,7 @@ docker compose restart xhh-onebot
 - `No valid cookie found or cookie expired`：适配器会自动触发扫码登录流程；如果在 Docker 后台模式下无法扫码，先 `docker compose up`（不加 `-d`）扫码后再 `Ctrl+C` 并 `docker compose up -d`。
 - 收不到事件：公共机器人确认 `xhh.owner` 为 `*`；白名单模式确认用户 ID 已配置，且消息没有被 SQLite 标记为已处理。
 - AstrBot 回复后没有写回：确认 AstrBot 发出的是 `send_group_msg` / group 类型 `send_msg`，并且 `group_id` 对应小黑盒 `link_id`。
-- 出现 `failed to get xhh link context, delivering comment only`：表示帖子详情接口不可用或被小黑盒判为非法请求；适配器会继续把用户评论内容投递给 AstrBot。只要日志出现 `delivered xhh message ... as OneBot event`，就说明事件已经发出。
+- 出现 `获取小黑盒帖子详情失败，将只投递评论内容`：表示帖子详情接口不可用或被小黑盒判为非法请求；适配器会继续把用户评论内容投递给 AstrBot。只要日志出现 `已投递小黑盒艾特到 OneBot`，就说明事件已经发出。
 
 
 

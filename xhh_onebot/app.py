@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime
 from typing import Any
 
 from xhh_onebot.config import Config
@@ -16,6 +17,19 @@ from xhh_onebot.xhh.poller import build_context_message
 logger = logging.getLogger(__name__)
 
 
+def format_timestamp(timestamp: int) -> str:
+    if timestamp <= 0:
+        return "未知时间"
+    return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def summarize_text(text: str, limit: int = 80) -> str:
+    normalized = " ".join(text.split())
+    if len(normalized) <= limit:
+        return normalized
+    return normalized[: limit - 1] + "…"
+
+
 class App:
     def __init__(self, config: Config) -> None:
         self.config = config
@@ -28,8 +42,8 @@ class App:
         await self.store.open()
         await self.xhh.open()
         if not await self.xhh.check_login():
-            logger.warning("xhh login check failed after pre-check; cookie may have expired during startup")
-        logger.info("xhh login OK, starting poll loop and OneBot WS")
+            logger.warning("小黑盒登录检查失败，cookie 可能已在启动后失效")
+        logger.info("小黑盒登录检查通过，开始轮询艾特消息并连接 OneBot 反向 WebSocket")
         await asyncio.gather(self.onebot.run_forever(), self.poll_loop())
 
     async def stop(self) -> None:
@@ -42,17 +56,17 @@ class App:
             try:
                 await self.poll_once()
             except Exception:
-                logger.exception("polling failed")
+                logger.exception("轮询小黑盒艾特消息失败")
             await asyncio.sleep(self.config.xhh.check_time)
 
     async def poll_once(self) -> None:
         expired = await self.store.expire_pending(self.config.poller.reply_timeout)
         if expired:
-            logger.warning("expired %s pending event(s)", expired)
+            logger.warning("已将 %s 条超时未回复的艾特事件标记为过期", expired)
         owners = self.config.xhh.owners
         allow_all_users = self.config.xhh.allow_all_users
         if not allow_all_users and not owners:
-            logger.warning("xhh.owner is empty, no messages will be delivered")
+            logger.warning("xhh.owner 为空，不会投递任何艾特消息")
             return
         messages = await self.xhh.fetch_mentions(limit=20)
         delivered = 0
@@ -60,16 +74,38 @@ class App:
             if delivered >= self.config.poller.max_batch:
                 break
             if not allow_all_users and message.user_id not in owners:
+                logger.info(
+                    "跳过未授权用户的艾特：时间=%s，用户=%s(%s)，帖子=%s(%s)，消息=%s",
+                    format_timestamp(message.mentioned_at),
+                    message.user_name or "未知用户",
+                    message.user_id,
+                    message.link_title or "未知帖子",
+                    message.link_id,
+                    message.message_id,
+                )
                 continue
             if message.message_id == 0 or message.comment_id == 0 or message.link_id == 0:
+                logger.warning("跳过字段不完整的艾特消息：%s", message)
                 continue
             if await self.store.seen_xhh_message(message.message_id):
                 continue
+            logger.info(
+                "收到新的小黑盒艾特：时间=%s，艾特人=%s(%s)，帖子=%s(%s)，帖子作者=%s(%s)，评论=%s，消息=%s",
+                format_timestamp(message.mentioned_at),
+                message.user_name or "未知用户",
+                message.user_id,
+                message.link_title or "未知帖子",
+                message.link_id,
+                message.link_user or "未知作者",
+                message.link_user_id,
+                summarize_text(message.comment_text),
+                message.message_id,
+            )
             try:
                 context = await self.xhh.get_link_context(message.link_id)
             except Exception as exc:
                 logger.warning(
-                    "failed to get xhh link context, delivering comment only: link_id=%s error=%s",
+                    "获取小黑盒帖子详情失败，将只投递评论内容：帖子=%s，错误=%s",
                     message.link_id,
                     exc,
                 )
@@ -106,7 +142,14 @@ class App:
                     },
                 )
             )
-            logger.info("delivered xhh message %s as OneBot event", message.message_id)
+            logger.info(
+                "已投递小黑盒艾特到 OneBot：消息=%s，评论=%s，帖子=%s，艾特人=%s(%s)",
+                message.message_id,
+                message.comment_id,
+                message.link_id,
+                message.user_name or "未知用户",
+                message.user_id,
+            )
             delivered += 1
 
     async def handle_action(self, action: dict[str, Any]) -> dict[str, Any] | None:
