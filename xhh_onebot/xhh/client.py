@@ -42,8 +42,15 @@ class XhhClient:
             await self.session.close()
             self.session = None
 
-    def load_cookie(self) -> None:
+    def cookie_file(self) -> Path:
         path = Path(self.config.cookie_file)
+        docker_data_dir = Path("/app/data")
+        if path.parent == Path("") and docker_data_dir.is_dir():
+            return docker_data_dir / path.name
+        return path
+
+    def load_cookie(self) -> None:
+        path = self.cookie_file()
         if not path.exists():
             return
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -54,7 +61,7 @@ class XhhClient:
         )
 
     def save_cookie(self) -> None:
-        path = Path(self.config.cookie_file)
+        path = self.cookie_file()
         if path.parent != Path(""):
             path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
@@ -71,7 +78,7 @@ class XhhClient:
         )
 
     def qrcode_file(self) -> Path:
-        path = Path(self.config.cookie_file)
+        path = self.cookie_file()
         if path.parent == Path(""):
             return Path("qrcode.png")
         return path.parent / "qrcode.png"
@@ -277,7 +284,7 @@ class XhhClient:
             data = await self.request(
                 "GET",
                 "/bbs/app/user/message",
-                params={"list_type": 0, "offset": 0, "limit": 1, "no_more": "false"},
+                params={"message_type": 16, "offset": 0, "limit": 1, "no_more": "false"},
             )
         except Exception:
             logger.exception("xhh login check failed")
@@ -300,7 +307,7 @@ class XhhClient:
         data = await self.request(
             "GET",
             "/bbs/app/user/message",
-            params={"list_type": 0, "offset": 0, "limit": limit, "no_more": "false"},
+            params={"message_type": 16, "offset": 0, "limit": limit, "no_more": "false"},
         )
         messages = data.get("result", {}).get("messages", []) or []
         result: list[XhhMessage] = []

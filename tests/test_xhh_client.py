@@ -58,7 +58,7 @@ async def test_get_link_context_uses_browser_observed_query_params():
     assert call["params"]["hkey"]
 
 @pytest.mark.asyncio
-async def test_fetch_mentions_uses_browser_observed_list_type():
+async def test_fetch_mentions_uses_browser_observed_message_type():
     client = XhhClient(XhhConfig(base_url="https://api.example.test"))
     session = FakeSession()
     client.session = session  # type: ignore[assignment]
@@ -67,8 +67,8 @@ async def test_fetch_mentions_uses_browser_observed_list_type():
 
     call = session.calls[0]
     assert call["url"] == "https://api.example.test/bbs/app/user/message"
-    assert call["params"]["list_type"] == 0
-    assert "message_type" not in call["params"]
+    assert call["params"]["message_type"] == 16
+    assert "list_type" not in call["params"]
     assert call["params"]["offset"] == 0
     assert call["params"]["limit"] == 20
     assert call["params"]["no_more"] == "false"
