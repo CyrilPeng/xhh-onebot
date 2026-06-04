@@ -76,6 +76,13 @@ class XhhClient:
             return Path("qrcode.png")
         return path.parent / "qrcode.png"
 
+    def qrcode_files(self) -> list[Path]:
+        paths = [self.qrcode_file()]
+        docker_data_path = Path("/app/data/qrcode.png")
+        if docker_data_path.parent.is_dir() and docker_data_path not in paths:
+            paths.append(docker_data_path)
+        return paths
+
     def parse_qr_login_params(self, qr_url: str) -> dict[str, str]:
         parsed = urlparse(qr_url)
         if parsed.path != "/account/qr_login/":
@@ -211,14 +218,15 @@ class XhhClient:
                 raise RuntimeError(f"missing qr_url: {response}")
             params = self.parse_qr_login_params(str(qr_url))
             expire = int(result.get("expire") or 120)
-            qrcode_path = self.qrcode_file()
-            qrcode_path.parent.mkdir(parents=True, exist_ok=True)
             image = qrcode.make(qr_url)
-            image.save(qrcode_path)
-            if qrcode_path != Path("qrcode.png"):
+            qrcode_paths = self.qrcode_files()
+            for qrcode_path in qrcode_paths:
+                qrcode_path.parent.mkdir(parents=True, exist_ok=True)
+                image.save(qrcode_path)
+            if Path("qrcode.png") not in qrcode_paths:
                 image.save("qrcode.png")
-            logger.info("Scan %s to login Xiaoheihe", qrcode_path)
-            logger.info("If terminal QR cannot be scanned, open the PNG file instead.")
+            logger.info("Scan QR code to login Xiaoheihe. PNG saved to: %s", ", ".join(str(path) for path in qrcode_paths))
+            logger.info("If terminal QR cannot be scanned, open the PNG file from the mounted data directory.")
             qr = qrcode.QRCode(border=1)
             qr.add_data(qr_url)
             qr.make(fit=True)

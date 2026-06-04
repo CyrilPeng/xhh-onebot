@@ -132,3 +132,11 @@ def test_qrcode_file_uses_cookie_directory():
     client = XhhClient(XhhConfig(cookie_file="data/cookie.json"))
 
     assert str(client.qrcode_file()).replace("\\", "/") == "data/qrcode.png"
+
+
+def test_qrcode_files_include_primary_path():
+    client = XhhClient(XhhConfig(cookie_file="data/cookie.json"))
+
+    paths = [str(path).replace("\\", "/") for path in client.qrcode_files()]
+
+    assert "data/qrcode.png" in paths

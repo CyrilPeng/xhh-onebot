@@ -62,7 +62,7 @@ docker compose build
 docker compose up
 ```
 
-> **提示**：首次运行建议不加 `-d`，这样可以直接在终端看到二维码。扫码成功后 `Ctrl+C` 停止，再用 `docker compose up -d` 后台启动。
+> **提示**：首次运行建议不加 `-d`，这样可以直接在终端看到二维码。Docker 控制台二维码如果扫码失败，可以打开宿主机 `./data/qrcode.png` 手动扫码。扫码成功后 `Ctrl+C` 停止，再用 `docker compose up -d` 后台启动。
 
 如果需要手动重新登录（例如 cookie 过期后容器不断重启），可以单独执行：
 
@@ -201,6 +201,7 @@ docker compose run --rm xhh-onebot poll-once --config /app/config.json --ws-time
 Docker 模式下建议只持久化 `./data`：
 
 - `./data/cookie.json`：小黑盒登录态。
+- `./data/qrcode.png`：最近一次登录二维码图片，控制台二维码无法识别时可手动打开扫码。
 - `./data/xhh-onebot.db`：已处理消息和待回复队列。
 
 `config.json` 以只读方式挂载到容器内 `/app/config.json`，修改配置后需要重启容器：
