@@ -1,30 +1,29 @@
-﻿{
-    "onebot":  {
-                   "reverse_ws_url":  "ws://host.docker.internal:6199/ws",
-                   "access_token":  "",
-                   "self_id":  10000001,
-                   "mention_self":  true,
-                   "heartbeat_interval":  30,
-                   "reconnect_interval":  5
-               },
-    "xhh":  {
-                "base_url":  "https://api.xiaoheihe.cn",
-                "owner":  "*",
-                "check_time":  30,
-                "reply_time":  5,
-                "device_id":  "",
-                "version":  "999.0.4",
-                "web_version":  "2.5",
-                "cookie_file":  "data/cookie.json"
-            },
-    "poller":  {
-                   "max_batch":  3,
-                   "context_max_chars":  3000,
-                   "reply_timeout":  300,
-                   "post_context_max_chars":  1200
-               },
-    "database":  {
-                     "path":  "data/xhh-onebot.db"
-                 }
+{
+  "onebot": {
+    "reverse_ws_url": "ws://host.docker.internal:6199/ws",
+    "access_token": "",
+    "self_id": 10000001,
+    "mention_self": true,
+    "heartbeat_interval": 30,
+    "reconnect_interval": 5
+  },
+  "xhh": {
+    "base_url": "https://api.xiaoheihe.cn",
+    "owner": "*",
+    "check_time": 30,
+    "reply_time": 5,
+    "device_id": "",
+    "version": "999.0.4",
+    "web_version": "2.5",
+    "cookie_file": "data/cookie.json"
+  },
+  "poller": {
+    "max_batch": 3,
+    "context_max_chars": 3000,
+    "post_context_max_chars": 1200,
+    "reply_timeout": 300
+  },
+  "database": {
+    "path": "data/xhh-onebot.db"
+  }
 }
-
