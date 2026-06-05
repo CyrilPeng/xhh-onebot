@@ -1,6 +1,6 @@
-﻿import pytest
+import pytest
 
-from xhh_onebot.app import App
+from xhh_onebot.app import App, limit_text
 from xhh_onebot.config import Config, DatabaseConfig, OneBotConfig
 from xhh_onebot.onebot.actions import contains_ignored_media, extract_plain_text
 from xhh_onebot.onebot.events import group_message_event, heartbeat_event
@@ -83,6 +83,20 @@ def test_extract_plain_text_removes_media_cq_codes_from_string_message():
 def test_contains_ignored_media_detects_media_segments():
     assert contains_ignored_media([{"type": "text", "data": {"text": "x"}}, {"type": "image", "data": {}}])
     assert not contains_ignored_media([{"type": "text", "data": {"text": "x"}}])
+
+
+def test_limit_text_truncates_long_reply():
+    text, truncated = limit_text("abcdef", 4)
+
+    assert text == "abc…"
+    assert truncated is True
+
+
+def test_limit_text_keeps_short_reply():
+    text, truncated = limit_text("abc", 4)
+
+    assert text == "abc"
+    assert truncated is False
 
 @pytest.mark.asyncio
 async def test_get_stranger_info_returns_basic_user(tmp_path):

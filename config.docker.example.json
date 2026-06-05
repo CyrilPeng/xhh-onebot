@@ -21,6 +21,7 @@
     "max_batch": 3,
     "context_max_chars": 3000,
     "post_context_max_chars": 1200,
+    "reply_max_chars": 1000,
     "reply_timeout": 300
   },
   "database": {

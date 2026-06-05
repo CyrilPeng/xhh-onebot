@@ -44,6 +44,7 @@ class PollerConfig(BaseModel):
     max_batch: int = 3
     context_max_chars: int = 3000
     post_context_max_chars: int = 1200
+    reply_max_chars: int = 1000
     reply_timeout: int = 300
 
 

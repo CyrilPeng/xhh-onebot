@@ -1,4 +1,4 @@
-﻿from xhh_onebot.config import Config, load_config
+from xhh_onebot.config import Config, load_config
 
 
 def test_load_config_accepts_utf8_bom(tmp_path):
@@ -8,6 +8,7 @@ def test_load_config_accepts_utf8_bom(tmp_path):
     config = load_config(config_path)
 
     assert config.onebot.self_id == 10000001
+    assert config.poller.reply_max_chars == 1000
 
 from xhh_onebot.config import XhhConfig
 

@@ -30,6 +30,12 @@ def summarize_text(text: str, limit: int = 80) -> str:
     return normalized[: limit - 1] + "…"
 
 
+def limit_text(text: str, max_chars: int) -> tuple[str, bool]:
+    if max_chars <= 0 or len(text) <= max_chars:
+        return text, False
+    return text[: max_chars - 1].rstrip() + "…", True
+
+
 class App:
     def __init__(self, config: Config) -> None:
         self.config = config
@@ -57,7 +63,19 @@ class App:
                 await self.poll_once()
             except Exception:
                 logger.exception("轮询小黑盒艾特消息失败")
+                await self.recover_login_if_needed()
             await asyncio.sleep(self.config.xhh.check_time)
+
+    async def recover_login_if_needed(self) -> None:
+        if await self.xhh.check_login():
+            return
+        logger.warning("检测到小黑盒登录态失效，暂停轮询并开始扫码重新登录")
+        try:
+            await self.xhh.login_qrcode()
+        except Exception:
+            logger.exception("小黑盒扫码重新登录失败，将在下次轮询后重试")
+            return
+        logger.info("小黑盒扫码重新登录成功，恢复轮询")
 
     async def poll_once(self) -> None:
         expired = await self.store.expire_pending(self.config.poller.reply_timeout)
@@ -168,6 +186,14 @@ class App:
             text = extract_plain_text(message)
             if not group_id or not text.strip():
                 return failed(echo, "missing group_id or message", 1400)
+            text, truncated = limit_text(text.strip(), self.config.poller.reply_max_chars)
+            if truncated:
+                logger.warning(
+                    "AstrBot 回复过长，已截断后发送到小黑盒：原始长度=%s，限制=%s，摘要=%s",
+                    len(extract_plain_text(message).strip()),
+                    self.config.poller.reply_max_chars,
+                    summarize_text(text),
+                )
             reply_id = extract_reply_id(message)
             ok = await self.reply_group(group_id, text, reply_id=reply_id)
             if not ok:
@@ -261,8 +287,15 @@ class App:
             if pending is None:
                 pending = await self.store.get_pending_for_group(group_id)
             if pending is None:
-                logger.warning("no pending message for group %s", group_id)
+                logger.warning("没有找到待回复的小黑盒艾特事件：帖子=%s", group_id)
                 return False
+            logger.info(
+                "准备回复小黑盒评论：帖子=%s，评论=%s，根评论=%s，回复摘要=%s",
+                pending.link_id,
+                pending.comment_id,
+                pending.root_comment_id,
+                summarize_text(text),
+            )
             ok = await self.xhh.reply_comment(
                 text=text,
                 link_id=pending.link_id,
@@ -271,7 +304,19 @@ class App:
             )
             if ok:
                 await self.store.mark_replied(pending.onebot_message_id)
+                logger.info(
+                    "小黑盒评论回复成功：帖子=%s，评论=%s，OneBot消息=%s",
+                    pending.link_id,
+                    pending.comment_id,
+                    pending.onebot_message_id,
+                )
             else:
                 await self.store.mark_failed(pending.onebot_message_id)
+                logger.warning(
+                    "小黑盒评论回复失败：帖子=%s，评论=%s，OneBot消息=%s",
+                    pending.link_id,
+                    pending.comment_id,
+                    pending.onebot_message_id,
+                )
             await asyncio.sleep(self.config.xhh.reply_time)
             return ok

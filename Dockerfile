@@ -42,7 +42,8 @@ COPY scripts ./scripts
 RUN pip install --no-deps .
 
 RUN mkdir -p /app/data \
-    && chmod +x /app/scripts/docker-hot-update.sh
+    && chmod +x /app/scripts/docker-hot-update.sh \
+    && ln -sf /app/scripts/docker-hot-update.sh /usr/local/bin/xhh-update
 
 VOLUME ["/app/data"]
 
