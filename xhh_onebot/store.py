@@ -11,6 +11,7 @@ import aiosqlite
 class PendingEvent:
     onebot_message_id: int
     xhh_message_id: int
+    dedupe_key: str
     link_id: int
     comment_id: int
     root_comment_id: int
@@ -32,6 +33,7 @@ class Store:
             CREATE TABLE IF NOT EXISTS events (
                 onebot_message_id INTEGER PRIMARY KEY,
                 xhh_message_id INTEGER UNIQUE NOT NULL,
+                dedupe_key TEXT NOT NULL DEFAULT '',
                 link_id INTEGER NOT NULL,
                 comment_id INTEGER NOT NULL,
                 root_comment_id INTEGER NOT NULL,
@@ -45,7 +47,23 @@ class Store:
                 ON events (status, link_id, created_at);
             """
         )
+        await self._migrate()
         await self.db.commit()
+
+    async def _migrate(self) -> None:
+        db = self._conn()
+        async with db.execute("PRAGMA table_info(events)") as cursor:
+            columns = {str(row["name"]) async for row in cursor}
+        if "dedupe_key" not in columns:
+            await db.execute("ALTER TABLE events ADD COLUMN dedupe_key TEXT NOT NULL DEFAULT ''")
+        await db.execute(
+            """
+            UPDATE events
+            SET dedupe_key = link_id || ':' || comment_id || ':' || root_comment_id || ':' || user_id
+            WHERE dedupe_key = ''
+            """
+        )
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_events_dedupe_key ON events (dedupe_key)")
 
     async def close(self) -> None:
         if self.db is not None:
@@ -65,17 +83,32 @@ class Store:
         ) as cursor:
             return await cursor.fetchone() is not None
 
-    async def add_pending(self, event: PendingEvent) -> None:
+    @staticmethod
+    def dedupe_key(link_id: int, comment_id: int, root_comment_id: int, user_id: int) -> str:
+        return f"{link_id}:{comment_id}:{root_comment_id}:{user_id}"
+
+    async def seen_event(self, xhh_message_id: int, dedupe_key: str) -> bool:
         db = self._conn()
-        await db.execute(
+        async with db.execute(
+            "SELECT 1 FROM events WHERE xhh_message_id = ? OR dedupe_key = ? LIMIT 1",
+            (xhh_message_id, dedupe_key),
+        ) as cursor:
+            return await cursor.fetchone() is not None
+
+    async def add_pending(self, event: PendingEvent) -> bool:
+        db = self._conn()
+        if await self.seen_event(event.xhh_message_id, event.dedupe_key):
+            return False
+        cursor = await db.execute(
             """
             INSERT OR IGNORE INTO events
-                (onebot_message_id, xhh_message_id, link_id, comment_id, root_comment_id, user_id, raw_text)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+                (onebot_message_id, xhh_message_id, dedupe_key, link_id, comment_id, root_comment_id, user_id, raw_text)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 event.onebot_message_id,
                 event.xhh_message_id,
+                event.dedupe_key,
                 event.link_id,
                 event.comment_id,
                 event.root_comment_id,
@@ -84,6 +117,7 @@ class Store:
             ),
         )
         await db.commit()
+        return cursor.rowcount > 0
 
     async def get_pending_for_group(self, group_id: int) -> Optional[PendingEvent]:
         db = self._conn()
@@ -102,6 +136,7 @@ class Store:
         return PendingEvent(
             onebot_message_id=row["onebot_message_id"],
             xhh_message_id=row["xhh_message_id"],
+            dedupe_key=row["dedupe_key"],
             link_id=row["link_id"],
             comment_id=row["comment_id"],
             root_comment_id=row["root_comment_id"],
@@ -139,6 +174,7 @@ class Store:
         return PendingEvent(
             onebot_message_id=row["onebot_message_id"],
             xhh_message_id=row["xhh_message_id"],
+            dedupe_key=row["dedupe_key"],
             link_id=row["link_id"],
             comment_id=row["comment_id"],
             root_comment_id=row["root_comment_id"],

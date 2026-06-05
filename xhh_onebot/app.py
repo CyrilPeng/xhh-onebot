@@ -105,7 +105,13 @@ class App:
             if message.message_id == 0 or message.comment_id == 0 or message.link_id == 0:
                 logger.warning("跳过字段不完整的艾特消息：%s", message)
                 continue
-            if await self.store.seen_xhh_message(message.message_id):
+            dedupe_key = self.store.dedupe_key(
+                message.link_id,
+                message.comment_id,
+                message.root_comment_id,
+                message.user_id,
+            )
+            if await self.store.seen_event(message.message_id, dedupe_key):
                 continue
             logger.info(
                 "收到新的小黑盒艾特：时间=%s，艾特人=%s(%s)，帖子=%s(%s)，帖子作者=%s(%s)，评论=%s，消息=%s",
@@ -137,13 +143,23 @@ class App:
             event = PendingEvent(
                 onebot_message_id=message.message_id,
                 xhh_message_id=message.message_id,
+                dedupe_key=dedupe_key,
                 link_id=message.link_id,
                 comment_id=message.comment_id,
                 root_comment_id=message.root_comment_id,
                 user_id=message.user_id,
                 raw_text=text,
             )
-            await self.store.add_pending(event)
+            if not await self.store.add_pending(event):
+                logger.info(
+                    "跳过重复小黑盒艾特：消息=%s，去重键=%s，帖子=%s，评论=%s，用户=%s",
+                    message.message_id,
+                    dedupe_key,
+                    message.link_id,
+                    message.comment_id,
+                    message.user_id,
+                )
+                continue
             await self.onebot.send_event(
                 group_message_event(
                     self_id=self.config.onebot.self_id,
