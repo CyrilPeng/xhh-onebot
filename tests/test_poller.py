@@ -52,3 +52,21 @@ def test_build_context_message_limits_post_body_before_final_user_comment():
     assert "...[truncated]" in text
     assert text.endswith("final question")
     assert text.count("final question") == 2
+
+
+def test_build_context_message_filters_self_mention_prefix():
+    message = XhhMessage(
+        comment_id=1,
+        comment_text='<a href="x">@呆猫香草</a>如何评价',
+        message_id=2,
+        root_comment_id=3,
+        link_id=4,
+        user_id=5,
+        mentioned_user_name="呆猫香草",
+    )
+
+    text = build_context_message(message, LinkContext(title="Title"), 1000, post_context_max_chars=100)
+
+    assert "@呆猫香草" not in text
+    assert text.startswith("[User Comment - Reply To This]\n如何评价")
+    assert text.endswith("如何评价")

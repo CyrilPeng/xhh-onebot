@@ -26,6 +26,14 @@ def truncate_text(text: str, max_chars: int) -> str:
     return text[: max(0, max_chars - 20)].rstrip() + "\n...[truncated]"
 
 
+def strip_self_mention(text: str, self_name: str = "") -> str:
+    text = text.strip()
+    if not self_name:
+        return text
+    pattern = re.compile(rf"^(?:@{re.escape(self_name)}\s*)+")
+    return pattern.sub("", text).strip()
+
+
 def build_context_message(
     message: XhhMessage,
     context: LinkContext,
@@ -33,6 +41,7 @@ def build_context_message(
     post_context_max_chars: int | None = None,
 ) -> str:
     user_comment = html_to_text(message.comment_text).strip() or message.comment_text
+    user_comment = strip_self_mention(user_comment, message.mentioned_user_name) or user_comment
     lines: list[str] = [
         "[User Comment - Reply To This]",
         user_comment,

@@ -23,6 +23,8 @@ class XhhMessage:
     link_user: str = ""
     link_user_id: int = 0
     mentioned_at: int = 0
+    mentioned_user_id: int = 0
+    mentioned_user_name: str = ""
 
 
 @dataclass(slots=True)

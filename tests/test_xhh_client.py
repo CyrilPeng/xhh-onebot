@@ -93,6 +93,8 @@ async def test_fetch_mentions_parses_log_metadata():
                     "linkid": 182596616,
                     "userid_a": 30060992,
                     "user_a": {"username": "author-a"},
+                    "userid_b": 99607404,
+                    "user_b": {"username": "bot-name"},
                     "link_title": "post title",
                     "link_user": "author-a",
                     "link_userid": 30060992,
@@ -111,6 +113,8 @@ async def test_fetch_mentions_parses_log_metadata():
     assert messages[0].link_user == "author-a"
     assert messages[0].link_user_id == 30060992
     assert messages[0].mentioned_at == 1780587671
+    assert messages[0].mentioned_user_id == 99607404
+    assert messages[0].mentioned_user_name == "bot-name"
 
 @pytest.mark.asyncio
 async def test_reply_comment_uses_browser_observed_is_cy_default():
