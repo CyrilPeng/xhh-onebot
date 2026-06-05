@@ -5,6 +5,7 @@ services:
       dockerfile: Dockerfile
       args:
         PYTHON_IMAGE: ${PYTHON_IMAGE:-docker.m.daocloud.io/library/python:3.12-slim}
+        DEBIAN_MIRROR: ${DEBIAN_MIRROR:-http://mirrors.tuna.tsinghua.edu.cn}
     image: xhh-onebot:latest
     container_name: xhh-onebot
     restart: unless-stopped
