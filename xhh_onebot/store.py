@@ -33,7 +33,7 @@ class Store:
             CREATE TABLE IF NOT EXISTS events (
                 onebot_message_id INTEGER PRIMARY KEY,
                 xhh_message_id INTEGER UNIQUE NOT NULL,
-                dedupe_key TEXT NOT NULL DEFAULT '',
+                dedupe_key TEXT NOT NULL,
                 link_id INTEGER NOT NULL,
                 comment_id INTEGER NOT NULL,
                 root_comment_id INTEGER NOT NULL,
@@ -45,25 +45,11 @@ class Store:
             );
             CREATE INDEX IF NOT EXISTS idx_events_pending
                 ON events (status, link_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_events_dedupe_key
+                ON events (dedupe_key);
             """
         )
-        await self._migrate()
         await self.db.commit()
-
-    async def _migrate(self) -> None:
-        db = self._conn()
-        async with db.execute("PRAGMA table_info(events)") as cursor:
-            columns = {str(row["name"]) async for row in cursor}
-        if "dedupe_key" not in columns:
-            await db.execute("ALTER TABLE events ADD COLUMN dedupe_key TEXT NOT NULL DEFAULT ''")
-        await db.execute(
-            """
-            UPDATE events
-            SET dedupe_key = link_id || ':' || comment_id || ':' || root_comment_id || ':' || user_id
-            WHERE dedupe_key = ''
-            """
-        )
-        await db.execute("CREATE INDEX IF NOT EXISTS idx_events_dedupe_key ON events (dedupe_key)")
 
     async def close(self) -> None:
         if self.db is not None:
@@ -74,14 +60,6 @@ class Store:
         if self.db is None:
             raise RuntimeError("store is not open")
         return self.db
-
-    async def seen_xhh_message(self, xhh_message_id: int) -> bool:
-        db = self._conn()
-        async with db.execute(
-            "SELECT 1 FROM events WHERE xhh_message_id = ? LIMIT 1",
-            (xhh_message_id,),
-        ) as cursor:
-            return await cursor.fetchone() is not None
 
     @staticmethod
     def dedupe_key(link_id: int, comment_id: int, root_comment_id: int, user_id: int) -> str:
