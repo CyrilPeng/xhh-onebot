@@ -27,7 +27,7 @@ RUN set -eux; \
             /etc/apt/sources.list; \
     fi; \
     apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
+    && apt-get install -y --no-install-recommends ca-certificates git \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./
@@ -37,10 +37,12 @@ RUN pip install --upgrade pip \
 
 COPY pyproject.toml README.md ./
 COPY xhh_onebot ./xhh_onebot
+COPY scripts ./scripts
 
 RUN pip install --no-deps .
 
-RUN mkdir -p /app/data
+RUN mkdir -p /app/data \
+    && chmod +x /app/scripts/docker-hot-update.sh
 
 VOLUME ["/app/data"]
 

@@ -88,6 +88,23 @@ docker compose logs -f xhh-onebot
 docker compose down
 ```
 
+### 6. Docker 热更新
+
+纯 Python 代码变更时，可以进入容器拉取最新代码并安装依赖，避免重新构建镜像：
+
+```bash
+docker compose exec xhh-onebot /app/scripts/docker-hot-update.sh
+docker compose restart xhh-onebot
+```
+
+默认从 `main` 分支更新；如需指定分支或仓库：
+
+```bash
+docker compose exec -e UPDATE_REF=main -e UPDATE_REPO_URL=https://github.com/CyrilPeng/xhh-onebot.git xhh-onebot /app/scripts/docker-hot-update.sh
+```
+
+> 热更新只适合更新 Python 源码、依赖和项目文件。若 Dockerfile、系统 apt 依赖或基础镜像发生变化，仍需重新 `docker compose build`。
+
 ## 本地源码调试
 
 源码调试建议使用项目内 `.venv`，避免污染全局 Python 环境。
