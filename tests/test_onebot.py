@@ -2,6 +2,7 @@
 
 from xhh_onebot.app import App
 from xhh_onebot.config import Config, DatabaseConfig, OneBotConfig
+from xhh_onebot.onebot.actions import contains_ignored_media, extract_plain_text
 from xhh_onebot.onebot.events import group_message_event, heartbeat_event
 
 
@@ -59,6 +60,29 @@ def test_group_message_event_can_disable_self_mention():
 
     assert event["message"] == [{"type": "text", "data": {"text": "hello"}}]
     assert event["raw_message"] == "hello"
+
+
+def test_extract_plain_text_merges_text_segments_and_ignores_media_segments():
+    message = [
+        {"type": "text", "data": {"text": "第一段"}},
+        {"type": "image", "data": {"file": "a.png"}},
+        {"type": "record", "data": {"file": "a.amr"}},
+        {"type": "text", "data": {"text": "第二段"}},
+    ]
+
+    assert extract_plain_text(message) == "第一段第二段"
+
+
+def test_extract_plain_text_removes_media_cq_codes_from_string_message():
+    message = "文字[CQ:image,file=a.png]更多[CQ:record,file=a.amr]结束"
+
+    assert extract_plain_text(message) == "文字更多结束"
+    assert contains_ignored_media(message)
+
+
+def test_contains_ignored_media_detects_media_segments():
+    assert contains_ignored_media([{"type": "text", "data": {"text": "x"}}, {"type": "image", "data": {}}])
+    assert not contains_ignored_media([{"type": "text", "data": {"text": "x"}}])
 
 @pytest.mark.asyncio
 async def test_get_stranger_info_returns_basic_user(tmp_path):

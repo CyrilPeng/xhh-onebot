@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from xhh_onebot.config import Config
-from xhh_onebot.onebot.actions import extract_plain_text, extract_reply_id, failed, success
+from xhh_onebot.onebot.actions import contains_ignored_media, extract_plain_text, extract_reply_id, failed, success
 from xhh_onebot.onebot.events import group_message_event
 from xhh_onebot.onebot.ws_reverse import ReverseWebSocket
 from xhh_onebot.store import PendingEvent, Store
@@ -162,10 +162,13 @@ class App:
             group_id = int(params.get("group_id") or 0)
             if action_name == "send_msg" and params.get("message_type") not in {None, "group"}:
                 return failed(echo, "only group message is supported")
-            text = extract_plain_text(params.get("message"))
+            message = params.get("message")
+            if contains_ignored_media(message):
+                logger.info("AstrBot 回复包含图片、语音或文件等媒体段，已忽略，仅发送文本到小黑盒")
+            text = extract_plain_text(message)
             if not group_id or not text.strip():
                 return failed(echo, "missing group_id or message", 1400)
-            reply_id = extract_reply_id(params.get("message"))
+            reply_id = extract_reply_id(message)
             ok = await self.reply_group(group_id, text, reply_id=reply_id)
             if not ok:
                 return failed(echo, "no pending xhh message or reply failed", 1400)
