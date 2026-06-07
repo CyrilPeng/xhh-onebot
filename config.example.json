@@ -22,7 +22,8 @@
     "context_max_chars": 3000,
     "post_context_max_chars": 1200,
     "reply_max_chars": 1000,
-    "reply_timeout": 300
+    "reply_timeout": 300,
+    "reply_merge_wait": 4.0
   },
   "database": {
     "path": "data/xhh-onebot.db"

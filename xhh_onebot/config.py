@@ -46,6 +46,7 @@ class PollerConfig(BaseModel):
     post_context_max_chars: int = 1200
     reply_max_chars: int = 1000
     reply_timeout: int = 300
+    reply_merge_wait: float = 4.0
 
 
 class DatabaseConfig(BaseModel):

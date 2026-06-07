@@ -17,6 +17,14 @@ from xhh_onebot.xhh.poller import build_context_message
 logger = logging.getLogger(__name__)
 
 
+class ReplyBuffer:
+    def __init__(self, group_id: int, reply_id: int | None) -> None:
+        self.group_id = group_id
+        self.reply_id = reply_id
+        self.parts: list[str] = []
+        self.task: asyncio.Task[None] | None = None
+
+
 def format_timestamp(timestamp: int) -> str:
     if timestamp <= 0:
         return "未知时间"
@@ -43,6 +51,7 @@ class App:
         self.xhh = XhhClient(config.xhh)
         self.onebot = ReverseWebSocket(config.onebot, self.handle_action)
         self.reply_lock = asyncio.Lock()
+        self.reply_buffers: dict[tuple[int, int | None], ReplyBuffer] = {}
 
     async def start(self) -> None:
         await self.store.open()
@@ -211,9 +220,7 @@ class App:
                     summarize_text(text),
                 )
             reply_id = extract_reply_id(message)
-            ok = await self.reply_group(group_id, text, reply_id=reply_id)
-            if not ok:
-                return failed(echo, "no pending xhh message or reply failed", 1400)
+            self.buffer_reply(group_id, text, reply_id=reply_id)
             return success(echo, {"message_id": int(asyncio.get_running_loop().time() * 1000)})
 
         if action_name == "get_login_info":
@@ -294,6 +301,47 @@ class App:
             return success(echo, {"yes": action_name == "can_send_image"})
 
         return failed(echo)
+
+    def buffer_reply(self, group_id: int, text: str, reply_id: int | None = None) -> None:
+        key = self.reply_buffer_key(group_id, reply_id)
+        buffer = self.reply_buffers.get(key)
+        if buffer is None:
+            buffer = ReplyBuffer(group_id, reply_id)
+            self.reply_buffers[key] = buffer
+        buffer.parts.append(text)
+        if buffer.task is not None:
+            buffer.task.cancel()
+        buffer.task = asyncio.create_task(self.flush_reply_later(key))
+
+    def reply_buffer_key(self, group_id: int, reply_id: int | None) -> tuple[int, int | None]:
+        if reply_id is not None:
+            return (group_id, reply_id)
+        for key in self.reply_buffers:
+            if key[0] == group_id:
+                return key
+        return (group_id, None)
+
+    async def flush_reply_later(self, key: tuple[int, int | None]) -> None:
+        try:
+            await asyncio.sleep(max(0, self.config.poller.reply_merge_wait))
+            buffer = self.reply_buffers.pop(key, None)
+            if buffer is None:
+                return
+            text = "\n".join(part for part in buffer.parts if part.strip()).strip()
+            if not text:
+                return
+            text, truncated = limit_text(text, self.config.poller.reply_max_chars)
+            if truncated:
+                logger.warning(
+                    "AstrBot 分段回复合并后过长，已截断后发送到小黑盒：限制=%s，摘要=%s",
+                    self.config.poller.reply_max_chars,
+                    summarize_text(text),
+                )
+            ok = await self.reply_group(buffer.group_id, text, reply_id=buffer.reply_id)
+            if not ok:
+                logger.warning("AstrBot 分段回复合并发送失败：帖子=%s", buffer.group_id)
+        except asyncio.CancelledError:
+            return
 
     async def reply_group(self, group_id: int, text: str, reply_id: int | None = None) -> bool:
         async with self.reply_lock:

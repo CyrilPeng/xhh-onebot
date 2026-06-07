@@ -1,9 +1,21 @@
+import asyncio
+
 import pytest
 
 from xhh_onebot.app import App, limit_text
 from xhh_onebot.config import Config, DatabaseConfig, OneBotConfig
 from xhh_onebot.onebot.actions import contains_ignored_media, extract_plain_text
 from xhh_onebot.onebot.events import group_message_event, heartbeat_event
+
+
+class CaptureReplyApp(App):
+    def __init__(self, config: Config) -> None:
+        super().__init__(config)
+        self.replies: list[tuple[int, str, int | None]] = []
+
+    async def reply_group(self, group_id: int, text: str, reply_id: int | None = None) -> bool:
+        self.replies.append((group_id, text, reply_id))
+        return True
 
 
 @pytest.mark.asyncio
@@ -116,3 +128,48 @@ async def test_get_stranger_info_returns_basic_user(tmp_path):
     assert response["echo"] == {"seq": 22}
     assert response["data"]["user_id"] == 12345
     assert response["data"]["nickname"] == "xhh-onebot"
+
+
+@pytest.mark.asyncio
+async def test_handle_action_merges_split_replies_and_ignores_media(tmp_path):
+    app = CaptureReplyApp(
+        Config(
+            onebot=OneBotConfig(self_id=12345),
+            database=DatabaseConfig(path=str(tmp_path / "events.db")),
+            poller={"reply_merge_wait": 0.03},
+        )
+    )
+
+    first = await app.handle_action(
+        {
+            "action": "send_group_msg",
+            "params": {
+                "group_id": 100,
+                "message": [
+                    {"type": "reply", "data": {"id": "42"}},
+                    {"type": "text", "data": {"text": "第一段"}},
+                    {"type": "image", "data": {"file": "a.png"}},
+                ],
+            },
+            "echo": "first",
+        }
+    )
+    second = await app.handle_action(
+        {
+            "action": "send_group_msg",
+            "params": {
+                "group_id": 100,
+                "message": [
+                    {"type": "record", "data": {"file": "a.amr"}},
+                    {"type": "text", "data": {"text": "第二段"}},
+                ],
+            },
+            "echo": "second",
+        }
+    )
+
+    assert first["status"] == "ok"
+    assert second["status"] == "ok"
+    await asyncio.sleep(0.08)
+
+    assert app.replies == [(100, "第一段\n第二段", 42)]
